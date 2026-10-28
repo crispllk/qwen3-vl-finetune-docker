@@ -4,7 +4,7 @@ Linux ARM64 服务器的单卡 LoRA 环境：Python **3.11.17**、PyTorch **2.9.
 
 ## 版本说明
 
-用户截图的原始版本保存在 `requirements/screenshot-pins.txt`。尽量保留固定版本；ARM64/cu126 缺少 torch 2.8 CUDA wheel，因此调整 torch/torchvision。NumPy、SciPy 和 AV 的截图版本不支持 Python 3.11，因此分别使用 2.4.6、1.17.1、18.1.0；tifffile 固定为 2026.3.3。详细原因、官方来源和驱动边界见 [兼容性核查](docs/compatibility.md)。
+尽量保留固定版本；ARM64/cu126 缺少 torch 2.8 CUDA wheel，因此调整 torch/torchvision。NumPy、SciPy 和 AV 的截图版本不支持 Python 3.11，因此分别使用 2.4.6、1.17.1、18.1.0；tifffile 固定为 2026.3.3。详细原因、官方来源和驱动边界见 [兼容性核查](docs/compatibility.md)。
 
 `requirements/runtime.in` 是目标直接依赖，`requirements/arm64.lock` 是针对 Python 3.11 / Linux ARM64 解析的全部固定依赖。PyTorch/torchvision 使用带 SHA256 的官方 CUDA wheel URL，其他包只从 PyPI 安装。截图没有提供原始完整锁文件，因此省略的传递依赖是重新解析的，不能声称恢复了未提供的锁文件。
 
