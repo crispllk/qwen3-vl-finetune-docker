@@ -69,9 +69,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "cu126-arm64-${GITHUB_SHA:0:12}" \
-            release/*.part-* release/SHA256SUMS \
-            release/environment.json release/requirements-arm64-lock.txt \
-            --target "$GITHUB_SHA" \
-            --title "Qwen3-VL ARM64 CUDA 12.6 (${GITHUB_SHA:0:12})" \
-            --notes-file release/NOTES.md
+          tag="cu126-arm64-${GITHUB_SHA:0:12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = false ]; then
+              echo 'A complete public release already exists for this commit.'
+              exit 0
+            fi
+          else
+            gh release create "$tag" --draft --target "$GITHUB_SHA" \
+              --title "Qwen3-VL ARM64 CUDA 12.6 (${GITHUB_SHA:0:12})" \
+              --notes-file release/NOTES.md
+          fi
+          gh release upload "$tag" release/*.part-* release/SHA256SUMS \
+            release/environment.json release/requirements-arm64-lock.txt --clobber
+          gh release edit "$tag" --draft=false --latest
