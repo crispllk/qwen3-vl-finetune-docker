@@ -1,0 +1,80 @@
+name: Build and publish ARM64 CUDA image
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: arm64-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    env:
+      IMAGE: ghcr.io/crispllk/qwen3-vl-finetune-docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm native ARM64 runner
+        run: test "$(uname -m)" = aarch64
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and run in-image verification
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          build-args: VCS_REF=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:cu126-arm64
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+      - name: Export actual environment and lock
+        run: |
+          mkdir -p artifacts
+          cid=$(docker create "$IMAGE:cu126-arm64")
+          docker cp "$cid:/opt/qwen3-vl/report/runs/." artifacts/
+          docker rm "$cid"
+          docker image inspect "$IMAGE:cu126-arm64" > artifacts/image-inspect.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-environment-${{ github.sha }}
+          path: artifacts/
+          retention-days: 30
+      - name: Publish verified image
+        run: |
+          docker push "$IMAGE:cu126-arm64"
+          docker push "$IMAGE:sha-${GITHUB_SHA}"
+          {
+            echo '### ARM64 image published'
+            echo "\`docker pull $IMAGE:cu126-arm64\`"
+            echo 'Build verification uses CPU. Run --require-gpu on the target NVIDIA server.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Export public Docker image download
+        run: |
+          mkdir -p release
+          docker save "$IMAGE:cu126-arm64" | gzip -1 | split -b 1800M - release/qwen3-vl-cu126-arm64.tar.gz.part-
+          (cd release && sha256sum *.part-* > SHA256SUMS)
+          cp artifacts/environment.json artifacts/requirements-arm64-lock.txt release/
+          cp docs/release-notes.md release/NOTES.md
+      - name: Publish image files in the public GitHub repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "cu126-arm64-${GITHUB_SHA:0:12}" \
+            release/*.part-* release/SHA256SUMS \
+            release/environment.json release/requirements-arm64-lock.txt \
+            --target "$GITHUB_SHA" \
+            --title "Qwen3-VL ARM64 CUDA 12.6 (${GITHUB_SHA:0:12})" \
+            --notes-file release/NOTES.md
